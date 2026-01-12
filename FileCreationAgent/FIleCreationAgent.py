@@ -3,10 +3,11 @@ import requests
 import re
 import subprocess
 import os
+import platform
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL = "gemma3:4b"
-
+CURRENT_OS=platform.system()
 
 # Tools
 
@@ -18,7 +19,7 @@ def write_to_files(filename, data, mode):
 
         with open(filename, mode, encoding="utf-8") as file:
             file.write(data)
-
+            
         return {
             "success": True,
             "filename": filename,
@@ -71,8 +72,6 @@ def run_shell_command(command):
         }
 
 
-
-
 #helpers
 def call_llm(messages):
     payload={
@@ -103,8 +102,11 @@ AVAILABLE_TOOLS={
   "run_shell_command":{"fn":run_shell_command}
 }
 
-system_instructions = """
+
+
+system_instructions = f"""
 You are an expert AI agent that builds folders, files, and complete project environments for users.
+You are running on {CURRENT_OS} operating system.
 
 Your responsibilities include:
 - Creating folders and files
@@ -122,7 +124,8 @@ STRICT OUTPUT RULES
 - Do NOT output anything except valid JSON
 - Use English only
 - Output must strictly follow ONE of the defined JSON formats
-- Never mix formats
+- commands should be accorrding to operatins systen  you are on for example if on linux use touch filename to create file but if on windows use type nul > filename. 
+- Never mix formats.
 - Never include extra keys
 
 
@@ -165,11 +168,11 @@ RESPONSE FORMATS
 FORMAT A — CONVERSATION RESPONSE  
 Use this ONLY when intent = CONVERSATION
 
-{
-  "step": {
+{{
+  "step": {{
     "description": "string"
-  }
-}
+  }}
+}}
 
 Rules for conversation responses:
 - No tools
@@ -182,10 +185,10 @@ Rules for conversation responses:
 FORMAT B — TASK RESPONSE  
 Use this ONLY when intent = TASK
 
-{
+{{
   "task": "string",
   "steps": [
-    {
+    {{
       "stepId": number,
       "title": "string",
       "description": "string",
@@ -194,9 +197,9 @@ Use this ONLY when intent = TASK
       "filename": "string",
       "data": "string",
       "mode": "string"
-    }
+    }}
   ]
-}
+}}
 
 
 TASK CONSTRAINTS
@@ -216,12 +219,12 @@ AVAILABLE TOOLS
    - Executes shell commands
    - Used for:
      - Creating folders
-     - Creating files
      - Running npm, git, build scripts
      - Git operations
      - Deletion ONLY after explicit user permission
 
 2. write_to_files
+   -Creating files
    - Writes content to files
    - Can create new files or modify existing ones
    - Requires:
@@ -235,51 +238,50 @@ Example 1
  - in this example we didnot send title, just one step and thats it
 user query : Hi, how are you?
 output:
-{
-    step:{
-        disription:"hi, i am fine , how are you? , how may i help you today?
-    }
-}
+{{
+    "step":{{
+        "description":"hi, i am fine , how are you? , how may i help you today?"
+    }}
+}}
 
 
 Example 2:
-User Query: create a file named add.js and write code to add two numbers
-
+User Query: create a file named add.js and write code to add two  numbers
 Output:
-{
+{{
   "task": "Create a JavaScript file and write addition logic",
   "steps": [
-    {
+    {{
       "stepId": 1,
-      "title": "Create file",
+      "title": "Create add.js file",
       "description": "Create a new JavaScript file named add.js.",
-      "func": "run_shell_command",
-      "command": "touch add.js",
-      "filename": "",
+      "func": "write_to_files",
+      "command": "",
+      "filename": "add.js",
       "data": "",
-      "mode": ""
-    },
-    {
+      "mode": "w"
+    }},
+    {{
       "stepId": 2,
       "title": "Write addition function",
       "description": "Write a function that adds two numbers.",
       "func": "write_to_files",
       "command": "",
       "filename": "add.js",
-      "data": "function add(a, b) {\\n  return a + b;\\n}\\n\\nconsole.log(add(2, 3));",
+      "data": "function add(a, b) {{\n  return a + b;\n}}\n\nconsole.log(add(2, 3));",
       "mode": "w"
-    }
+    }}
   ]
-}
+}}
 
 Example 3
 User Query:Create a basic Node.js backend using Express
 
 Output:
-{
+{{
   "task": "Create a basic Node.js backend using Express",
   "steps": [
-    {
+    {{
       "stepId": 1,
       "title": "Create backend folder",
       "description": "Create a root folder for the backend project.",
@@ -288,8 +290,8 @@ Output:
       "filename": "",
       "data": "",
       "mode": ""
-    },
-    {
+    }},
+    {{
       "stepId": 2,
       "title": "Initialize npm project",
       "description": "Initialize a Node.js project inside the backend folder.",
@@ -298,8 +300,8 @@ Output:
       "filename": "",
       "data": "",
       "mode": ""
-    },
-    {
+    }},
+    {{
       "stepId": 3,
       "title": "Install Express",
       "description": "Install Express as a dependency.",
@@ -308,8 +310,8 @@ Output:
       "filename": "",
       "data": "",
       "mode": ""
-    },
-    {
+    }},
+    {{
       "stepId": 4,
       "title": "Create project structure",
       "description": "Create folders for routes and controllers.",
@@ -318,49 +320,49 @@ Output:
       "filename": "",
       "data": "",
       "mode": ""
-    },
-    {
+    }},
+    {{
       "stepId": 5,
-      "title": "Create entry file",
-      "description": "Create index.js as the main server file.",
-      "func": "run_shell_command",
-      "command": "cd backend && touch index.js",
-      "filename": "",
+      "title": "Create index.js",
+      "description": "Create the main server file.",
+      "func": "write_to_files",
+      "command": "",
+      "filename": "backend/index.js",
       "data": "",
-      "mode": ""
-    },
-    {
+      "mode": "w"
+    }},
+    {{
       "stepId": 6,
-      "title": "Create route file",
-      "description": "Create a basic route file.",
-      "func": "run_shell_command",
-      "command": "cd backend && touch routes/root.route.js",
-      "filename": "",
+      "title": "Create root route file",
+      "description": "Create the root route file.",
+      "func": "write_to_files",
+      "command": "",
+      "filename": "backend/routes/root.route.js",
       "data": "",
-      "mode": ""
-    },
-    {
+      "mode": "w"
+    }},
+    {{
       "stepId": 7,
       "title": "Write Express server code",
       "description": "Add basic Express server setup.",
       "func": "write_to_files",
       "command": "",
       "filename": "backend/index.js",
-      "data": "const express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.send('Server is running');\n});\n\nconst PORT = 3000;\napp.listen(PORT, () => {\n  console.log(`Server started on port ${PORT}`);\n});",
+      "data": "const express = require('express');\nconst app = express();\n\napp.use(express.json());\n\napp.get('/', (req, res) => {{\n  res.send('Server is running');\n}});\n\nconst PORT = 3000;\napp.listen(PORT, () => {{\n  console.log(`Server started on port ${{PORT}}`);\n}});",
       "mode": "w"
-    },
-    {
+    }},
+    {{
       "stepId": 8,
-      "title": "Write route file",
+      "title": "Write route logic",
       "description": "Add a basic root route.",
       "func": "write_to_files",
       "command": "",
       "filename": "backend/routes/root.route.js",
-      "data": "const express = require('express');\nconst router = express.Router();\n\nrouter.get('/', (req, res) => {\n  res.json({ message: 'API is working' });\n});\n\nmodule.exports = router;",
+      "data": "const express = require('express');\nconst router = express.Router();\n\nrouter.get('/', (req, res) => {{\n  res.json({{ message: 'API is working' }});\n}});\n\nmodule.exports = router;",
       "mode": "w"
-    }
+    }}
   ]
-}
+}}
 
 
 """
@@ -373,3 +375,47 @@ messages=[
     }
 ]
 
+while True:
+    query=input("> ")
+    if(query.lower()=="exit"):
+        print("Thank you for using")
+        break
+    
+    messages.append({
+        "role":"user",
+        "content":query
+    })
+    
+    raw_output=call_llm(messages)
+    cleaned=clean_llm_json(raw_output)
+    # print(cleaned)
+    try:
+        llm_output = json.loads(cleaned)
+    except json.JSONDecodeError:
+        print(" LLM returned invalid JSON:")
+        print(raw_output)
+        continue
+    
+    messages.append({
+        "role": "assistant",
+        "content": cleaned
+    })
+
+    if(llm_output.get("task")):
+      print(f"📝 task -> {llm_output.get('task')}")
+      for step in llm_output.get("steps"):  
+        tool_name=step['func']
+        print(f"title -> {step.get('title')}")
+        print(f"description -> {step.get('description')}")
+        if(tool_name in AVAILABLE_TOOLS):
+          if(tool_name=="write_to_files"):
+            tool_input=[step.get("filename"),step.get("data"),step.get("mode")]    
+            res=AVAILABLE_TOOLS[tool_name]["fn"](*tool_input) 
+          elif(tool_name=="run_shell_command"):
+            tool_input=[step.get("command")]
+            res=AVAILABLE_TOOLS[tool_name]["fn"](*tool_input)  
+    
+    else:
+      print(llm_output["step"]["description"])        
+      
+      

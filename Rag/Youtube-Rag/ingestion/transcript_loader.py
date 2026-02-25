@@ -1,6 +1,9 @@
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+from langchain_core.documents import Document
 
-def load_transcript(video_id: str):
+
+def load_transcript(video_id: str, window_size: int = 60):
+
     ytt_api = YouTubeTranscriptApi()
 
     video_transcript = None
@@ -9,14 +12,14 @@ def load_transcript(video_id: str):
     try:
         transcript_list = ytt_api.list(video_id)
 
-        #  Direct English
+        #   direct English transcript
         try:
             transcript = transcript_list.find_transcript(['en'])
             video_transcript = transcript.fetch()
             video_lang_code = "en"
 
         except:
-            #  Try translation
+            #  translation to English
             for transcript in transcript_list:
                 if transcript.is_translatable:
                     translation_codes = [
@@ -29,7 +32,7 @@ def load_transcript(video_id: str):
                         video_lang_code = "en"
                         break
 
-            # 3️ Fallback
+            # Fallback:  original language
             if video_transcript is None:
                 transcript = list(transcript_list)[0]
                 video_transcript = transcript.fetch()
@@ -39,6 +42,44 @@ def load_transcript(video_id: str):
         print("No captions available for this video")
         return None, None
 
-    clean_text = " ".join(chunk.text for chunk in video_transcript)
+    #grouping
+    documents = []
+    current_window_start = 0
+    current_text = []
 
-    return clean_text, video_lang_code
+    for chunk in video_transcript:
+        chunk_start = chunk.start
+        chunk_text = chunk.text
+
+        
+        if chunk_start >= current_window_start + window_size:
+            if current_text:
+                documents.append(
+                    Document(
+                        page_content=" ".join(current_text),
+                        metadata={
+                            "start": current_window_start,
+                            "window_size": window_size
+                        }
+                    )
+                )
+
+            
+            current_window_start += window_size
+            current_text = []
+
+        current_text.append(chunk_text)
+
+    if current_text:
+        documents.append(
+            Document(
+                page_content=" ".join(current_text),
+                metadata={
+                    "start": current_window_start,
+                    "window_size": window_size
+                }
+            )
+        )
+    return documents, video_lang_code
+
+

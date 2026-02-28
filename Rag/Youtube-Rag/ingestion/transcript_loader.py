@@ -2,6 +2,8 @@ from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from langchain_core.documents import Document
 
 
+
+
 def load_transcript(video_id: str, window_size: int = 60):
 
     ytt_api = YouTubeTranscriptApi()
@@ -58,7 +60,9 @@ def load_transcript(video_id: str, window_size: int = 60):
                     Document(
                         page_content=" ".join(current_text),
                         metadata={
+                            "video_id": video_id,
                             "start": current_window_start,
+                            "language": video_lang_code,
                             "window_size": window_size
                         }
                     )
@@ -75,8 +79,10 @@ def load_transcript(video_id: str, window_size: int = 60):
             Document(
                 page_content=" ".join(current_text),
                 metadata={
+                    "video_id": video_id,
                     "start": current_window_start,
-                    "window_size": window_size
+                    "window_size": window_size,
+                    "language": video_lang_code
                 }
             )
         )

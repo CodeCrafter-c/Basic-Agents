@@ -23,17 +23,26 @@ if user_input:
     with st.chat_message("user"):
         st.write(user_input)
 
-    res = chatBot.invoke(
-        {"messages": [HumanMessage(content=user_input)]},
-        config=CONFIG
-    )
+    # res = chatBot.stream(
+    #     {"messages": [HumanMessage(content=user_input)]},
+    #     config=CONFIG
+    # )
 
-    ai_msg = res["messages"][-1].content
+    # ai_msg = res["messages"][-1].content
 
+
+
+    with st.chat_message("assistant"):
+        ai_msg=st.write_stream(
+            message_chunk.content for message_chunk, metadata in chatBot.stream(
+                {"messages": [HumanMessage(content=user_input)]},
+                config={"configurable":{"thread_id":"thread-1"}},
+                stream_mode="messages"
+            )
+        )
+        
+        
     st.session_state["message_history"].append({
         "role": "assistant",
         "content": ai_msg
     })
-
-    with st.chat_message("assistant"):
-        st.write(ai_msg)

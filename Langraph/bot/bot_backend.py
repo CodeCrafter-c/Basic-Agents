@@ -3,8 +3,10 @@ from typing import TypedDict,Annotated
 from langchain_core.messages import BaseMessage,HumanMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph.message import add_messages 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel, Field
+import sqlite3
+
 
 
 llm=ChatOllama(model="qwen2.5:7b")
@@ -55,8 +57,10 @@ def chat_node(state:ChatState)->ChatState:
     
     res=llm.invoke(messages)
     return{'messages':[res]}
-    
-check_pointer=InMemorySaver()
+
+conn=sqlite3.connect("chatbot.db",check_same_thread=False)    
+check_pointer=SqliteSaver(conn)
+
 graph=StateGraph(ChatState)
 
 #Node
@@ -71,3 +75,26 @@ graph.add_edge("chat_node",END)
 
 
 chatBot=graph.compile(checkpointer=check_pointer)
+
+
+def retrieve_all_threads():
+    threads = {}
+    thread_ids = set()
+
+    print("Scanning checkpoints...")
+
+    for checkpoint in check_pointer.list(None):
+        thread_ids.add(checkpoint.config["configurable"]["thread_id"])
+
+    print("Unique threads:", thread_ids)
+
+    for thread_id in thread_ids:
+        state = chatBot.get_state(
+            {"configurable": {"thread_id": thread_id}}
+        )
+
+        title = state.values.get("title") or "New Chat"
+        threads[thread_id] = title
+
+    # print("Threads:", threads)
+    return threads

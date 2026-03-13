@@ -1,6 +1,6 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage
-from bot_backend import chatBot
+from bot_backend import chatBot,retrieve_all_threads
 import uuid
 
 
@@ -22,10 +22,11 @@ def add_chats(thread_id,title):
 
 
 def show_chats():
+    print(st.session_state["previous_chats"])
     chats = list(st.session_state["previous_chats"].items())[::-1]
 
     for thread_id, title in chats:
-        if st.sidebar.button(title):
+        if st.sidebar.button(title, key=thread_id):
             st.session_state["thread_id"] = thread_id
             load_conversations(thread_id)
             
@@ -46,12 +47,12 @@ def load_conversations(thread_id):
                 'role':'assistant',
                 'content':msg.content
             })
-        st.session_state["message_history"]=history
+    st.session_state["message_history"]=history
 
 
 
 if "previous_chats" not in st.session_state:
-    st.session_state["previous_chats"]={}
+    st.session_state["previous_chats"]=retrieve_all_threads()
 
 if "message_history" not in st.session_state:
     st.session_state["message_history"] = []
@@ -68,8 +69,8 @@ if st.sidebar.button("new chat"):
     newChat()
 
 st.sidebar.header("My chats")
-
-show_chats()
+if st.session_state["previous_chats"]:
+    show_chats()
 
 
 

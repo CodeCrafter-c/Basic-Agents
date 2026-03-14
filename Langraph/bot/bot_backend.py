@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from langgraph.graph import StateGraph,START,END
 from typing import TypedDict,Annotated
 from langchain_core.messages import BaseMessage,HumanMessage

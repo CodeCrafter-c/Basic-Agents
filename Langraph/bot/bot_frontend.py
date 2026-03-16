@@ -2,7 +2,7 @@ import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from bot_backend import chatBot, retrieve_all_threads, ingest_pdf, thread_document_metadata
 import uuid
-
+from langgraph.types import Command
 
 # ---------- utility functions ----------
 
@@ -25,10 +25,10 @@ def show_chats():
     chats = list(st.session_state["previous_chats"].items())[::-1]
     for thread_id, title in chats:
         if st.sidebar.button(title, key=thread_id):
-            # Switch thread and load its messages, then rerun to refresh the UI
+            
             st.session_state["thread_id"] = thread_id
             load_conversations(thread_id)
-            st.rerun()  # FIX 2: rerun after loading so the chat area refreshes immediately
+            st.rerun()  
 
 
 def load_conversations(thread_id):
@@ -42,15 +42,14 @@ def load_conversations(thread_id):
     for msg in messages:
         if isinstance(msg, HumanMessage):
             history.append({"role": "user", "content": msg.content})
-        # FIX 3: Only include AIMessages that have actual text content.
-        # ToolMessages and empty AIMessage chunks (used during streaming) are skipped
-        # to avoid blank assistant bubbles in the chat history.
         elif isinstance(msg, AIMessage) and msg.content:
             history.append({"role": "assistant", "content": msg.content})
     st.session_state["message_history"] = history
 
 
 # ---------- session state initialisation ----------
+if "pending_interrupt" not in st.session_state:
+    st.session_state["pending_interrupt"] = None
 
 if "previous_chats" not in st.session_state:
     st.session_state["previous_chats"] = retrieve_all_threads()
@@ -68,6 +67,12 @@ thread_key = str(st.session_state["thread_id"])
 thread_docs = st.session_state["ingested_docs"].setdefault(thread_key, {})
 threads = st.session_state["previous_chats"]
 
+config = {
+        "configurable": {"thread_id": st.session_state["thread_id"]},
+        "metadata": {"thread_id": st.session_state["thread_id"]},
+        "run_name": "chat_run",
+    }
+
 # ---------- sidebar ----------
 
 st.sidebar.title("let's chat")
@@ -75,10 +80,6 @@ st.sidebar.title("let's chat")
 if st.sidebar.button("new chat"):
     new_chat()
 
-# FIX 4: Removed the duplicate "My chats" section that was below.
-# show_chats() already renders all previous chats as buttons.
-# Having a second loop that used thread_id (UUID) as label was confusing,
-# and that block also contained the broken `selected_thread` logic.
 if st.session_state["previous_chats"]:
     show_chats()
 
@@ -116,17 +117,31 @@ for message in st.session_state["message_history"]:
 
 user_input = st.chat_input("type here")
 
+state = chatBot.get_state(config)
+if state.next:
+    st.session_state["pending_interrupt"] = state.tasks[0].interrupts[0].value
+else:
+    st.session_state["pending_interrupt"] = None
+if st.session_state.get("pending_interrupt"):
+    st.warning(st.session_state["pending_interrupt"])
+    col1, col2 = st.columns(2)
+    if col1.button("✅ Confirm", key="hitl_confirm"):
+        chatBot.invoke(Command(resume="yes"), config=config)
+        st.session_state["pending_interrupt"] = None
+        load_conversations(st.session_state["thread_id"])
+        st.rerun()
+    if col2.button("❌ Cancel", key="hitl_cancel"):
+        chatBot.invoke(Command(resume="no"), config=config)
+        st.session_state["pending_interrupt"] = None
+        load_conversations(st.session_state["thread_id"])
+        st.rerun()
 if user_input:
     st.session_state["message_history"].append({"role": "user", "content": user_input})
 
     with st.chat_message("user"):
         st.write(user_input)
 
-    config = {
-        "configurable": {"thread_id": st.session_state["thread_id"]},
-        "metadata": {"thread_id": st.session_state["thread_id"]},
-        "run_name": "chat_run",
-    }
+    
 
     with st.chat_message("assistant"):
         status_holder = {"box": None}
@@ -137,12 +152,6 @@ if user_input:
                 config=config,
                 stream_mode="messages",
             ):
-                # FIX 6: Skip any chunk produced by title_generator.
-                # On the first message of a new chat, the title_generator node runs
-                # and emits a structured JSON response like {"title": "Hello"}.
-                # Without this check, that JSON leaks into the streamed output and
-                # appears on screen before the actual assistant reply.
-                # metadata["langgraph_node"] tells us which node produced the chunk.
                 if metadata.get("langgraph_node") == "title_generator":
                     continue
 
@@ -163,14 +172,17 @@ if user_input:
         if status_holder["box"] is not None:
             status_holder["box"].update(label="✅ Tool finished", state="complete", expanded=False)
 
-    state = chatBot.get_state(config)
-    title = state.values.get("title")
-    add_chats(st.session_state["thread_id"], title)
+        # fetch fresh state FIRST, then check
+        state = chatBot.get_state(config)
+        if state.next:
+            st.rerun()
 
-    # FIX 5: st.write_stream() can return a list of chunks instead of a plain string.
-    # Joining ensures we always store a clean string in message history.
-    ai_text = ai_message if isinstance(ai_message, str) else "".join(ai_message or [])
-    st.session_state["message_history"].append({"role": "assistant", "content": ai_text})
+        title = state.values.get("title")   # reuse same fresh state, no need to fetch again
+        add_chats(st.session_state["thread_id"], title)
+
+        ai_text = ai_message if isinstance(ai_message, str) else "".join(ai_message or [])
+        st.session_state["message_history"].append({"role": "assistant", "content": ai_text})
+
 
     doc_meta = thread_document_metadata(thread_key)
     if doc_meta:

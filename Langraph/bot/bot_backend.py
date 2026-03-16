@@ -27,19 +27,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
 
+from langgraph.types import interrupt
 
 
 stock_price_api = os.getenv("STOCK_PRICE_API")
 llm = ChatOllama(model="qwen2.5:7b")
 title_model = ChatOllama(model="qwen2.5:7b")
 
-# FIX 1: embeddings must be an OllamaEmbeddings object, not a raw string.
-# os.getenv() returns a plain string like "nomic-embed-text", which cannot
-# be passed to FAISS.from_documents(). Wrapping it in OllamaEmbeddings() fixes that.
 embeddings = OllamaEmbeddings(model=os.getenv("EMBEDDING_MODEL"))
 
 
-# PDF store per thread
 _THREAD_RETRIEVERS: Dict[str, Any] = {}
 _THREAD_METADATA: Dict[str, dict] = {}
 
@@ -135,7 +132,27 @@ def get_stock_price(symbol: str) -> dict:
     r = requests.get(url)
     return r.json()
 
-
+@tool
+def purchase_stocks(symbol:str, qty:int,totalAmount:float)->dict:
+    """
+    Buy share of a stock after user confimation
+        """
+    decision=interrupt(f"Approve buying of {qty} shares of {symbol} at rs:- ${totalAmount}?(yes/no) ")
+    if(isinstance(decision,str) and decision.lower()=="yes"):
+        return{
+            "status":"success",
+            "message":f"purchased order placed for {qty}  shares of {symbol}",
+            "symbol":symbol,
+            "quantity":qty
+        }
+    else:
+        return{
+            "status":"cancelled",
+            "message":f"purchase of {qty}  shares of {symbol}  abandoned",
+            "symbol":symbol,
+            "quantity":qty    
+        }
+    
 
 
 @tool
@@ -165,7 +182,7 @@ def rag_tool(query: str) -> dict:
     }
 
 
-tools = [search_tool, calculator, get_stock_price, rag_tool]
+tools = [search_tool, calculator, get_stock_price, purchase_stocks,rag_tool]
 llm_with_tools = llm.bind_tools(tools)
 
 
